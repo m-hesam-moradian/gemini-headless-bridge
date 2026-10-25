@@ -1,9 +1,9 @@
 {
   "name": "gemini-headless-bridge",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Persistent-Context Headless Browser Bridge for Gemini + Local Test Host (Playwright, Express 5, TypeScript)",
+  "description": "Persistent-Context Headless Browser Bridge for Gemini, controlled entirely via a Telegram bot (Playwright, Express 5, TypeScript, zero web UI)",
   "engines": {
     "node": ">=18.17"
   },

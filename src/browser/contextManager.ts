@@ -5,7 +5,6 @@ import { chromium, type BrowserContext, type LaunchOptions, type Page } from 'pl
 import { config } from '../config.js';
 import { probeAuthState, type AuthVerdict } from './domSelectors.js';
 import { ensureHeadedDisplay } from './display.js';
-import { notify } from '../notify.js';
 import type { AuthState, BridgeMode, BridgeStatus, LogEvent, Screenshot } from '../types.js';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -91,7 +90,6 @@ export class ContextManager extends EventEmitter {
     } catch (err) {
       this.lastError = errMsg(err);
       this.log('error', `Boot failed: ${this.lastError}`);
-      await notify(`Boot failed: ${this.lastError}`);
     }
   }
 
@@ -129,7 +127,6 @@ export class ContextManager extends EventEmitter {
           this.log('warn', this.lastError);
         }
         this.log('info', 'Visible login window opened — complete your Google sign-in there');
-        await notify('Visible login window opened — waiting for your Google sign-in');
         this.watchForAuth(context);
         this.launching = false;
         return this.status();
@@ -461,7 +458,6 @@ export class ContextManager extends EventEmitter {
           'Login window still open after 10 min — watcher stopped, popup stays open. ' +
             'Use "Force Switch to Headless" when you are ready.'
         );
-        await notify('Login window still open after 10 minutes — waiting on you');
         return;
       }
 
@@ -487,7 +483,6 @@ export class ContextManager extends EventEmitter {
           `Authentication confirmed (stable for ${this.authStableCount} polls) — closing popup in ${config.authGraceMs}ms ` +
             `(cookie-settle grace), then going headless`
         );
-        await notify('Google sign-in confirmed — switching to headless mode');
         this.pendingSwitchAt = Date.now() + config.authGraceMs;
         try {
           await sleep(config.authGraceMs);
@@ -548,7 +543,6 @@ export class ContextManager extends EventEmitter {
         if (verdict.signInVisible) {
           this.authState = 'unauthenticated';
           this.log('warn', 'Probe: session not signed in — open the visible login window to authenticate');
-          await notify('Gemini session expired — login needed');
           return this.authState;
         }
         if (verdict.authenticated) {
@@ -557,7 +551,6 @@ export class ContextManager extends EventEmitter {
             this.authState = 'authenticated';
             this.lastError = null;
             this.log('info', `Probe: authenticated (stable for ${stable} polls) — headless bridge is READY`);
-            await notify('Headless bridge is authenticated & ready');
             return this.authState;
           }
         } else {

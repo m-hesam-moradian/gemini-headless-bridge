@@ -16,7 +16,7 @@ const bool = (value: string | undefined, fallback: boolean): boolean => {
 };
 
 export const config = {
-  version: '0.1.1',
+  version: '0.2.0',
   phase: 1,
 
   // ── Server ────────────────────────────────────────────────────────
