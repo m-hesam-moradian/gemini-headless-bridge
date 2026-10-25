@@ -28,6 +28,16 @@ export interface BridgeStatus {
   profileDir: string;
 }
 
+/** One live-view capture (GET /api/auth/screenshot). */
+export interface Screenshot {
+  mode: BridgeMode;
+  /** URL of the page that was captured. */
+  url: string;
+  ts: number;
+  /** PNG as a data URL: "data:image/png;base64,…". */
+  image: string;
+}
+
 /** One entry of the in-memory action log (GET /api/logs). */
 export interface LogEvent {
   ts: number;

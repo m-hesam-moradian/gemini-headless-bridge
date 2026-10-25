@@ -8,6 +8,27 @@ authRouter.get('/status', (_req, res) => {
   res.json({ ok: true, status: contextManager.status() });
 });
 
+/**
+ * GET /api/auth/screenshot — live view of the bridge browser's active page.
+ * Works in BOTH modes: watch the visible login popup (e.g. which 2FA step is
+ * showing) or peek into the headless session. Returns PNG as a data URL.
+ */
+authRouter.get('/screenshot', async (_req, res, next) => {
+  try {
+    const shot = await contextManager.captureScreenshot();
+    if (!shot) {
+      res.status(409).json({
+        ok: false,
+        error: { code: 'NOT_RUNNING', message: 'Browser is not running — open it first' },
+      });
+      return;
+    }
+    res.json({ ok: true, shot });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** POST /api/auth/login — release the profile, open the VISIBLE sign-in window. */
 authRouter.post('/login', async (_req, res, next) => {
   try {

@@ -47,7 +47,12 @@
     btnHeadless: $('btnHeadless'),
     actionFeedback: $('actionFeedback'),
     logList: $('logList'),
-    btnClearLog: $('btnClearLog')
+    btnClearLog: $('btnClearLog'),
+    btnLive: $('btnLive'),
+    lvState: $('lvState'),
+    lvFrame: $('lvFrame'),
+    lvImg: $('lvImg'),
+    lvCaption: $('lvCaption')
   };
 
   var MODE_LABEL = {
@@ -200,6 +205,50 @@
 
   els.btnClearLog.addEventListener('click', function () {
     els.logList.innerHTML = '';
+  });
+
+  /* ── Live view ─────────────────────────────────────────── */
+  var liveTimer = null;
+
+  function fetchLive() {
+    api('/api/auth/screenshot')
+      .then(function (data) {
+        var s = data.shot;
+        els.lvImg.src = s.image;
+        els.lvFrame.classList.remove('hidden');
+        var d = new Date(s.ts);
+        var two = function (n) { return (n < 10 ? '0' : '') + n; };
+        els.lvCaption.textContent =
+          (s.mode === 'headed' ? 'visible window' : 'headless') + ' · ' + s.url + ' · ' +
+          two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds());
+        els.lvState.textContent = 'live';
+        els.lvState.dataset.tone = 'ok';
+      })
+      .catch(function (err) {
+        els.lvState.textContent = 'unavailable';
+        els.lvState.dataset.tone = 'err';
+        if (String(err.message).indexOf('not running') !== -1) {
+          els.lvState.textContent = 'browser off';
+          els.lvState.dataset.tone = 'idle';
+          if (!els.lvFrame.classList.contains('hidden')) {
+            els.lvCaption.textContent = 'Browser is not running — open it first.';
+          }
+        }
+      });
+  }
+
+  els.btnLive.addEventListener('click', function () {
+    if (liveTimer) {
+      clearInterval(liveTimer);
+      liveTimer = null;
+      els.btnLive.textContent = 'Start live view';
+      els.lvState.textContent = 'off';
+      els.lvState.dataset.tone = 'idle';
+      return;
+    }
+    els.btnLive.textContent = 'Stop live view';
+    fetchLive();
+    liveTimer = setInterval(fetchLive, 3000);
   });
 
   poll();

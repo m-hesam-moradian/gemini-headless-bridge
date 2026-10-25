@@ -4,8 +4,9 @@ import path from 'node:path';
 import { chromium, type BrowserContext, type LaunchOptions, type Page } from 'playwright';
 import { config } from '../config.js';
 import { probeAuthState, type AuthVerdict } from './domSelectors.js';
+import { ensureHeadedDisplay } from './display.js';
 import { notify } from '../notify.js';
-import type { AuthState, BridgeMode, BridgeStatus, LogEvent } from '../types.js';
+import type { AuthState, BridgeMode, BridgeStatus, LogEvent, Screenshot } from '../types.js';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -214,6 +215,24 @@ export class ContextManager extends EventEmitter {
     return this.events.slice(-limit);
   }
 
+  /**
+   * Live view: what the bridge browser currently sees. Works in BOTH modes —
+   * watch the login popup (e.g. to see which 2FA step Google is showing) or
+   * peek into the headless session. Returns null when no browser is running.
+   */
+  async captureScreenshot(): Promise<Screenshot | null> {
+    const ctx = this.context;
+    if (!ctx) return null;
+    const page = await this.getOrCreatePage(ctx);
+    const buf = await page.screenshot({ type: 'png', timeout: 8_000 });
+    return {
+      mode: this.mode,
+      url: page.url(),
+      ts: Date.now(),
+      image: `data:image/png;base64,${buf.toString('base64')}`,
+    };
+  }
+
   // ═══════════════════════════ internals ════════════════════════════
 
   /** Serialize all lifecycle mutations behind one promise chain. */
@@ -257,6 +276,21 @@ export class ContextManager extends EventEmitter {
     let lastErr: unknown = null;
 
     for (const channel of this.channelOrder()) {
+      // Visible windows need something to render on. Desktop machines have a
+      // display; headless Linux servers do not — ensureHeadedDisplay() starts
+      // (or reuses) an Xvfb virtual framebuffer there. Re-checked on every
+      // channel attempt so a mid-flight Xvfb death is self-healing.
+      if (!headless && process.platform === 'linux') {
+        const display = await ensureHeadedDisplay((msg) => this.log('info', msg));
+        if (!display) {
+          throw new Error(
+            'No display available for the visible browser window: DISPLAY is not set and ' +
+              'Xvfb is not installed. On a headless server run `sudo apt-get install xvfb` ' +
+              '(the bridge then uses it automatically). Headless mode keeps working regardless.'
+          );
+        }
+      }
+
       for (let attempt = 1; attempt <= config.relaunchAttempts; attempt++) {
         try {
           const context = await chromium.launchPersistentContext(config.profileDir, {

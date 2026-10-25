@@ -1,6 +1,6 @@
 {
   "name": "gemini-headless-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Persistent-Context Headless Browser Bridge for Gemini + Local Test Host (Playwright, Express 5, TypeScript)",

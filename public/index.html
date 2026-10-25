@@ -71,6 +71,25 @@
       <p class="actionFeedback" id="actionFeedback" role="status" aria-live="polite"></p>
     </section>
 
+    <section class="card" aria-labelledby="liveTitle">
+      <div class="card-head">
+        <h2 id="liveTitle">Live view</h2>
+        <span class="state-chip" id="lvState" data-tone="idle">off</span>
+      </div>
+      <p class="hint">
+        What the bridge browser sees right now — works in visible AND headless mode.
+        Use it to check which sign-in / 2FA step the popup is showing, or to peek
+        into the headless session. Refreshes every 3s while running.
+      </p>
+      <div class="actions">
+        <button id="btnLive" class="btn" type="button">Start live view</button>
+      </div>
+      <figure class="lv-frame hidden" id="lvFrame">
+        <img id="lvImg" alt="Live view of the bridge browser" />
+        <figcaption class="lv-caption" id="lvCaption"></figcaption>
+      </figure>
+    </section>
+
     <section class="card log-card" aria-labelledby="logTitle">
       <div class="card-head">
         <h2 id="logTitle">Action log</h2>
@@ -82,7 +101,7 @@
 
   <footer class="foot">
     <span>
-      local bridge · API: /api/auth/status · /api/auth/login · /api/auth/switch-mode · /api/logs
+      local bridge · API: /api/auth/status · /api/auth/login · /api/auth/switch-mode · /api/auth/screenshot · /api/logs
     </span>
   </footer>
 

@@ -127,6 +127,31 @@ body {
   font-size: 13px; color: var(--muted); font-family: var(--mono);
 }
 
+/* ── Live view ───────────────────────────────────────── */
+.hidden { display: none !important; }
+.lv-frame {
+  margin: 12px 0 0;
+  border: 1px solid var(--card-edge);
+  border-radius: 9px;
+  overflow: hidden;
+  background: #0e141c;
+}
+.lv-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 120px;
+}
+.lv-caption {
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: var(--muted);
+  word-break: break-all;
+  border-top: 1px solid var(--card-edge);
+  background: #0e141c;
+}
+
 /* ── Action log ──────────────────────────────────────── */
 .log-card { grid-column: 1 / -1; }
 .log {

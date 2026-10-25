@@ -62,6 +62,7 @@ gemini-headless-bridge/
 │   └── browser/
 │       ├── contextManager.ts # Lifecycle: mutex, auto-chain, headless switch, probes
 │       ├── domSelectors.ts   # Centralized selectors (Phase 1: auth detection)
+│       ├── display.ts        # Xvfb virtual display — headed mode on headless Linux
 │       └── chatAutomator.ts  # (arrives in Phase 2)
 ├── .env.example
 ├── package.json
@@ -109,6 +110,7 @@ popup open as long as you like).
 | GET    | `/api/auth/status`     | Full status: mode, authState, channel, countdown, lastError — poll this |
 | POST   | `/api/auth/login`      | Open the visible sign-in window (auto-closes after auth + grace)   |
 | POST   | `/api/auth/switch-mode`| Body `{"mode":"headed"\|"headless"}` — manual override / re-probe   |
+| GET    | `/api/auth/screenshot` | Live view PNG (data URL) of what the bridge browser sees now |
 | GET    | `/api/logs`           | Recent bridge action log (last 300 events)                         |
 | POST   | `/api/chat/new`       | *Phase 2* — clicks the real "New chat" button (501 for now)        |
 | POST   | `/api/chat/send`      | *Phase 2/3* — prompt injection + streamed response (501 for now)   |
@@ -148,6 +150,13 @@ See `.env.example` — every value has a safe default. Highlights:
   only ever reported when the URL is the app AND the composer
   (`rich-textarea div[contenteditable="true"]` etc.) is visible AND no
   sign-in CTA is present.
+- **Headed mode on headless servers** — a VISIBLE window needs something to
+  render on. When `DISPLAY` is absent on Linux, the bridge auto-starts
+  [Xvfb](https://en.wikipedia.org/wiki/Xvfb) (if installed) and renders the
+  popup on that virtual screen; the Test Host **Live view** then shows it as
+  a PNG you can watch from anywhere. No display and no Xvfb → the call fails
+  fast with install instructions instead of a cryptic crash. Desktop
+  machines never enter this path.
 
 ## Security notes
 
@@ -171,6 +180,7 @@ See `.env.example` — every value has a safe default. Highlights:
 
 | Symptom | Fix |
 |---|---|
+| "Open Visible Browser" fails with `Target page, context or browser has been closed` | No display on this machine (server / CI / sandbox) — Chromium refuses to open a VISIBLE window. `sudo apt-get install xvfb` and try again: the bridge uses it automatically. Desktop machines never hit this. |
 | Google shows "This browser or app may not be secure" | Sign in via the popup when `BROWSER_CHANNELS` starts with `chrome` (default). Avoid removing the anti-automation flags. |
 | Launch fails with "profile in use" | A crashed Chromium left stale locks — the bridge cleans them automatically and retries. If a *live* Chromium holds the profile (check the log for its PID), close it first. |
 | Status stuck on `auth: unknown` | Gemini may have shown an interstitial (cookie consent, region notice). Open the visible browser, complete it, then force-switch to headless. |
