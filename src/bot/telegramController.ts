@@ -27,7 +27,7 @@ import path from 'node:path';
 
 export interface BridgeControllerAdapter {
   getStatus: () => {
-    mode: 'headed' | 'headless' | 'stopped';
+    mode: 'headed' | 'remote' | 'headless' | 'stopped';
     running: boolean;
     launching: boolean;
     authenticated: boolean | 'unknown';
@@ -37,6 +37,10 @@ export interface BridgeControllerAdapter {
   getLogs: () => Array<{ ts: string; msg: string }>;
   launchHeaded: () => Promise<unknown>;
   switchToHeadless: () => Promise<unknown>;
+  /** Spawn the INTERACTIVE native Chrome (remote control via /remote viewer). */
+  openRemoteChrome?: () => Promise<unknown>;
+  /** Cookie import (backup auth path). Returns a status with authState. */
+  injectCookies?: (raw: string) => Promise<{ authState: 'unknown' | 'authenticated' | 'unauthenticated' }>;
   captureScreenshot: () => Promise<Buffer | null>;
   clickNewChat?: () => Promise<void>;
   sendPrompt?: (prompt: string, onChunk?: (text: string) => void) => Promise<string>;
@@ -52,11 +56,19 @@ export class TelegramBridgeBot {
   private polling = false;
   private ownerChatId: number | null = null;
   private botUsername: string | null = null;
+  /** Public HTTPS URL of the /remote viewer (Telegram web_app button). */
+  private remoteViewerUrl: string;
 
-  constructor(token: string, bridge: BridgeControllerAdapter, initialChatId?: string) {
+  constructor(
+    token: string,
+    bridge: BridgeControllerAdapter,
+    initialChatId?: string,
+    remoteViewerUrl = ''
+  ) {
     this.token = token.trim();
     this.apiBase = `https://api.telegram.org/bot${this.token}`;
     this.bridge = bridge;
+    this.remoteViewerUrl = remoteViewerUrl;
 
     if (initialChatId && !Number.isNaN(Number(initialChatId))) {
       this.ownerChatId = Number(initialChatId);
@@ -81,22 +93,29 @@ export class TelegramBridgeBot {
   }
 
   private getKeyboard() {
-    return {
-      inline_keyboard: [
-        [
-          { text: '🖥️ Open Login Popup', callback_data: 'cb:login' },
-          { text: '🕶️ Force Headless', callback_data: 'cb:headless' },
-        ],
-        [
-          { text: '📸 Live Screenshot', callback_data: 'cb:screenshot' },
-          { text: '📋 Action Logs', callback_data: 'cb:logs' },
-        ],
-        [
-          { text: '🔄 Refresh Status', callback_data: 'cb:status' },
-          { text: '➕ New Chat', callback_data: 'cb:new_chat' },
-        ],
+    const rows: Array<Array<Record<string, unknown>>> = [
+      [
+        { text: '🌐 Remote Chrome', callback_data: 'cb:remote' },
+        { text: '🕶️ Force Headless', callback_data: 'cb:headless' },
       ],
-    };
+      [
+        { text: '📸 Live Screenshot', callback_data: 'cb:screenshot' },
+        { text: '📋 Action Logs', callback_data: 'cb:logs' },
+      ],
+      [
+        { text: '🔄 Refresh Status', callback_data: 'cb:status' },
+        { text: '➕ New Chat', callback_data: 'cb:new_chat' },
+      ],
+    ];
+    // Telegram web_app buttons require an HTTPS URL. When no public HTTPS
+    // URL is configured (plain localhost setups), the normal buttons above
+    // still work and /remote replies with a plain clickable link.
+    if (this.remoteViewerUrl.startsWith('https://')) {
+      rows.unshift([
+        { text: '🌐 Open Remote Chrome (live control)', web_app: { url: this.remoteViewerUrl } },
+      ]);
+    }
+    return { inline_keyboard: rows };
   }
 
   private formatStatusText(): string {
@@ -111,9 +130,11 @@ export class TelegramBridgeBot {
     const modeBadge =
       s.mode === 'headed'
         ? '🖥️ Visible Popup Open'
-        : s.mode === 'headless'
-          ? '🕶️ Background Headless'
-          : '⏹️ Stopped';
+        : s.mode === 'remote'
+          ? '🌐 Remote Chrome (interactive)'
+          : s.mode === 'headless'
+            ? '🕶️ Background Headless'
+            : '⏹️ Stopped';
 
     // Telegram MarkdownV1 treats _ * [ ] ( ) ~ ` > # + - = | { } . ! as
     // special inside `code` spans — escape user-controlled values.
@@ -129,7 +150,7 @@ export class TelegramBridgeBot {
       `*Launching:* \`${s.launching ? 'yes' : 'no'}\``,
       `*URL:* \`${esc(s.url ?? 'https://gemini.google.com/app')}\``,
       '',
-      '_Tap a button below to control the browser, or send any text message to chat with Gemini._',
+      '_Tap 🌐 Remote Chrome to control the server browser (sign in there), then Force Headless. Or send any text to chat with Gemini._',
     ].join('\n');
   }
 
@@ -243,10 +264,22 @@ export class TelegramBridgeBot {
     try {
       if (data === 'cb:status') {
         await this.sendMessage(chatId, this.formatStatusText());
+      } else if (data === 'cb:remote') {
+        await this.sendMessage(
+          chatId,
+          '🌐 *Starting interactive Remote Chrome…*\nA REAL Chromium opens on the server (no Playwright attached — Google sees a normal browser). Control it with the 🌐 *Open Remote Chrome* button or the link below: sign in, solve anything, then tap *Force Headless* to lock the session in.',
+          false
+        );
+        await this.bridge.openRemoteChrome?.();
+        const link = this.remoteViewerUrl || '/remote';
+        await this.sendMessage(
+          chatId,
+          `🌐 *Remote Chrome is live.*\n\n${link.startsWith('http') ? link : 'Open the viewer at ' + link}\n\nSign into Google inside that window. When done, tap 🕶️ Force Headless.`
+        );
       } else if (data === 'cb:login') {
         await this.sendMessage(
           chatId,
-          '🖥️ *Opening Visible Login Popup…*\nSign into your Google account in the browser window. Once signed in, the bridge waits 3s for cookies to flush, then auto-switches to headless mode.',
+          '🖥️ *Opening Visible Login Popup…*\n(Playwright-attached window — prefer 🌐 Remote Chrome for Google sign-in.)',
           false
         );
         await this.bridge.launchHeaded();
@@ -280,16 +313,79 @@ export class TelegramBridgeBot {
   private async handleMessage(msg: {
     chat?: { id: number };
     text?: string;
+    /** Telegram file attachment (cookie import path). */
+    document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
   }): Promise<void> {
     const chatId = msg.chat?.id;
     const text = (msg.text ?? '').trim();
-    if (!chatId || !text) return;
+    if (!chatId) return;
 
     this.saveOwnerChatId(chatId);
     if (this.ownerChatId && chatId !== this.ownerChatId) return;
 
+    // ── cookie import via FILE (Cookie-Editor exports exceed the 4096-char
+    //    message limit, so files are the robust path) ─────────────────
+    if (msg.document && this.bridge.injectCookies) {
+      await this.sendMessage(chatId, '🍪 *Importing cookies from the file…*', false);
+      try {
+        const raw = await this.downloadTelegramFile(msg.document.file_id);
+        const status = await this.bridge.injectCookies(raw);
+        await this.sendMessage(
+          chatId,
+          status.authState === 'authenticated'
+            ? '✅ *Cookies accepted — session is AUTHENTICATED & headless bridge is ready!*'
+            : `⚠️ Cookies injected but the probe says: *${status.authState}*. The cookies may be expired — re-export fresh ones and try again.`
+        );
+      } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        await this.sendMessage(chatId, `❌ *Cookie import failed:*\n\`${m.replace(/`/g, "'")}\``);
+      }
+      return;
+    }
+
+    if (!text) return;
+
     if (text === '/start' || text === '/status' || text === '/panel') {
       await this.sendMessage(chatId, this.formatStatusText());
+      return;
+    }
+
+    if (text === '/remote' || text === '/start remote') {
+      const link = this.remoteViewerUrl || '/remote';
+      await this.sendMessage(
+        chatId,
+        `🌐 *Interactive Remote Chrome*\n\n${link.startsWith('http') ? 'Open: ' + link : 'Viewer lives at ' + link + ' on the bridge host.'}\n\nTip: the 🌐 *Open Remote Chrome* button on the panel opens it right here in Telegram.`
+      );
+      return;
+    }
+
+    if (text.startsWith('/cookies')) {
+      const payload = text.slice('/cookies'.length).trim();
+      if (!payload) {
+        await this.sendMessage(
+          chatId,
+          '🍪 *Cookie import (backup path — Remote Chrome is the primary one).*\n\nEither:\n• Send a Cookie\-Editor \"Export as JSON\" file here as a DOCUMENT, or\n• `/cookies <name=value; name2=value2>` header string\n\n⚠️ Exported cookies usually live only 1–3 days \(Google rotates them\) — sign in via 🌐 Remote Chrome for a months\-long session.',
+          false
+        );
+        return;
+      }
+      if (!this.bridge.injectCookies) {
+        await this.sendMessage(chatId, 'Cookie import is not available.', false);
+        return;
+      }
+      await this.sendMessage(chatId, '🍪 *Injecting cookies…*', false);
+      try {
+        const status = await this.bridge.injectCookies(payload);
+        await this.sendMessage(
+          chatId,
+          status.authState === 'authenticated'
+            ? '✅ *Cookies accepted — AUTHENTICATED & ready!*'
+            : `⚠️ Injected, but probe says: *${status.authState}* — cookies may be stale.`
+        );
+      } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        await this.sendMessage(chatId, `❌ *Cookie import failed:*\n\`${m.replace(/`/g, "'")}\``);
+      }
       return;
     }
 
@@ -303,6 +399,29 @@ export class TelegramBridgeBot {
         'ℹ️ Direct prompts are unlocked in Phase 2/3. Use the buttons below to control the browser.'
       );
     }
+  }
+
+  /** Download a user-sent Telegram file (cookie JSON/txt). */
+  private async downloadTelegramFile(fileId: string): Promise<string> {
+    const info = (await (
+      await fetch(`${this.apiBase}/getFile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId }),
+        signal: AbortSignal.timeout(15_000),
+      })
+    ).json()) as { ok: boolean; result?: { file_path: string }; description?: string };
+    if (!info.ok || !info.result) {
+      throw new Error(`getFile failed: ${info.description ?? 'unknown'}`);
+    }
+    const res = await fetch(`https://api.telegram.org/file/bot${this.token}/${info.result.file_path}`, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`file download failed: HTTP ${res.status}`);
+    const text = await res.text();
+    // Telegram file_path already encodes the name; guard absurd sizes.
+    if (text.length > 2_000_000) throw new Error('File too large (2MB limit)');
+    return text;
   }
 
   /** Begin long-polling. Idempotent — safe to call once at startup. */
@@ -329,7 +448,11 @@ export class TelegramBridgeBot {
                 data?: string;
                 message?: { chat?: { id: number } };
               };
-              message?: { chat?: { id: number }; text?: string };
+              message?: {
+                chat?: { id: number };
+                text?: string;
+                document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
+              };
             }>;
           };
           if (data.ok && Array.isArray(data.result)) {

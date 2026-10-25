@@ -16,7 +16,7 @@ const bool = (value: string | undefined, fallback: boolean): boolean => {
 };
 
 export const config = {
-  version: '0.2.0',
+  version: '0.3.0',
   phase: 1,
 
   // ── Server ────────────────────────────────────────────────────────
@@ -55,6 +55,20 @@ export const config = {
   relaunchAttempts: num(process.env.RELAUNCH_ATTEMPTS, 5),
   relaunchBaseDelayMs: num(process.env.RELAUNCH_BASE_DELAY_MS, 1000),
   relaunchMaxDelayMs: num(process.env.RELAUNCH_MAX_DELAY_MS, 16_000),
+
+  // ── Interactive Remote Chrome ─────────────────────────────────
+  /** CDP debug port for the NATIVE-spawned interactive Chrome window. */
+  remoteDebugPort: num(process.env.REMOTE_DEBUG_PORT, 9222),
+  /** Window size of the remote Chrome (also the screencast frame size). */
+  remoteWindowWidth: num(process.env.REMOTE_WINDOW_WIDTH, 1100),
+  remoteWindowHeight: num(process.env.REMOTE_WINDOW_HEIGHT, 750),
+  /** JPEG quality of streamed remote frames (0–100). */
+  remoteFrameQuality: num(process.env.REMOTE_FRAME_QUALITY, 60),
+  /** Public HTTPS URL of the /remote viewer (Telegram web_app button).
+   *  Leave empty on a plain localhost setup — the bot then sends a plain link. */
+  remotePublicUrl: process.env.REMOTE_PUBLIC_URL || '',
+  /** File holding the random access token for /remote (auto-generated). */
+  remoteTokenFile: path.join(projectRoot, '.remote-token'),
 
   // ── Optional Telegram notifications ───────────────────────────────
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',

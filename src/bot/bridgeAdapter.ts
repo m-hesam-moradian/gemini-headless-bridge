@@ -41,6 +41,14 @@ export const bridgeAdapter: BridgeControllerAdapter = {
     return contextManager.openLoginPopup();
   },
 
+  async openRemoteChrome() {
+    return contextManager.openRemoteChrome();
+  },
+
+  async injectCookies(raw: string) {
+    return contextManager.injectCookies(raw);
+  },
+
   async switchToHeadless() {
     return contextManager.switchToHeadless();
   },

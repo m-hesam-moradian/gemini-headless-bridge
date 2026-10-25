@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { contextManager } from './browser/contextManager.js';
 import { authRouter } from './routes/auth.routes.js';
 import { chatRouter } from './routes/chat.routes.js';
+import { remoteRouter } from './routes/remote.routes.js';
 import { startBot, stopBot } from './bot/index.js';
 
 /**
@@ -46,6 +47,9 @@ app.get('/api/logs', (_req, res) => {
 });
 app.use('/api/auth', authRouter);
 app.use('/api/chat', chatRouter);
+// Interactive Remote Chrome viewer (token-protected; mounted before the
+// /api 404 so its paths are top-level).
+app.use('/remote', remoteRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ ok: false, error: { code: 'NOT_FOUND', message: 'Unknown API route' } });
 });

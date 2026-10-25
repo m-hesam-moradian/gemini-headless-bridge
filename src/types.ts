@@ -2,6 +2,7 @@
 export type BridgeMode =
   | 'stopped'   // no browser running
   | 'headed'    // visible window open (interactive login)
+  | 'remote'    // INTERACTIVE remote-control Chrome (native spawn + CDP screencast)
   | 'headless'; // background browser on the same profile
 
 /** What the last URL+DOM probe concluded about the Google session. */

@@ -114,6 +114,50 @@ From now on `npm run dev` boots straight into headless and the bot tells you
 whether the session is still valid. If it expired, tap **Open Login Popup**
 again.
 
+## Interactive Remote Chrome (primary login path on a server)
+
+The **primary way to sign in when the bridge runs on a server**: an interactive
+live view of the server's own Chromium, right in your browser or Telegram.
+
+```
+Telegram ──tap 🌐──► /remote viewer (HTTPS) ──► frames + clicks + typing
+                                                      │ CDP (Page+Input only)
+                                              Xvfb :99 ── NATIVE Chromium
+                                              (NO Playwright attached —
+                                               Google sees a normal browser)
+                                                      │ same profile
+                                              ./browser-profile
+```
+
+**Why native spawn?** Playwright attaches a full CDP client (`Runtime.enable`
+etc.) which Google's sign-in flags as automation. The remote session instead
+spawns the Chromium binary as a plain OS process — during the actual sign-in
+there is **no automation client attached at all**. The minimal CDP client used
+for control only sends `Page.startScreencast` (frames) and `Input.dispatch*`
+(clicks/keys — these arrive in the page as *trusted* input events). The result:
+a server-side session that lasts **months**, not days.
+
+**Flow:** tap **🌐 Remote Chrome** in Telegram (or open the viewer URL) → the
+page shows the live browser → click/type/sign-in/2FA from your phone → when the
+bridge confirms the sign-in it pings Telegram → tap **🕶️ Force Headless** →
+the interactive window closes and the headless bridge takes over the profile.
+
+The viewer also works **anytime later** for visual debugging — CAPTCHAs,
+consent interstitials, unexpected popups: tap 🌐 Remote Chrome, see the actual
+browser, fix it, Force Headless again.
+
+Security: every `/remote` endpoint requires a random access token
+(auto-generated to `.remote-token`, gitignored); the bot's link carries it.
+The CDP debug port binds to 127.0.0.1 only.
+
+## Cookie import (backup path)
+
+Send a **Cookie-Editor** "Export as JSON" **file** to the bot (or
+`/cookies name=value; ...`) and it injects the cookies, then probes. Useful
+when interactive login is impossible. ⚠️ Exported cookies usually live only
+1–3 days (Google rotates `__Secure-1PSIDTS` and revokes colliding copies) —
+prefer Remote Chrome for a durable session.
+
 ## Headed mode on a headless server
 
 A VISIBLE (`headless: false`) Chromium needs something to render on. Desktop

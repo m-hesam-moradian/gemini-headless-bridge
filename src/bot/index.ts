@@ -2,6 +2,7 @@ import { contextManager } from '../browser/contextManager.js';
 import { config } from '../config.js';
 import { TelegramBridgeBot } from './telegramController.js';
 import { bridgeAdapter } from './bridgeAdapter.js';
+import { remoteViewerUrl } from '../routes/remote.routes.js';
 
 /**
  * Wires the Telegram bot to the bridge + streams live lifecycle events.
@@ -28,6 +29,16 @@ const IMPORTANT_EVENT_PATTERNS = [
   /Reusing existing Xvfb virtual display/,
   /No display available for the visible browser window/,
   /Boot failed/,
+  // Remote Chrome lifecycle
+  /Spawning NATIVE Chrome/,
+  /Remote screencast attached/,
+  /Interactive Remote Chrome is live/,
+  /Remote Chrome: Google sign-in CONFIRMED/,
+  /Remote Chrome window closed/,
+  /Closing interactive Remote Chrome/,
+  /Remote Chrome exited/,
+  /Remote Chrome failed/,
+  /Injected \d+ cookies/,
 ];
 
 function isImportant(msg: string): boolean {
@@ -52,7 +63,10 @@ export async function startBot(): Promise<void> {
   bot = new TelegramBridgeBot(
     config.telegramBotToken,
     bridgeAdapter,
-    config.telegramChatId
+    config.telegramChatId,
+    // The public HTTPS viewer URL (empty on plain-localhost setups → the
+    // web_app button is omitted and /remote sends a plain link instead).
+    config.remotePublicUrl ? remoteViewerUrl() : ''
   );
 
   // Validate the token + capture @username before polling.

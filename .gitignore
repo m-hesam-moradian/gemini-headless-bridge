@@ -10,6 +10,7 @@ dist/
 # Local configuration & secrets
 .env
 .telegram-chat-id
+.remote-token
 
 # Logs & OS noise
 *.log

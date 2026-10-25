@@ -1,10 +1,12 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium, type BrowserContext, type LaunchOptions, type Page } from 'playwright';
+import { chromium, type BrowserContext, type LaunchOptions, type Page, type Cookie } from 'playwright';
 import { config } from '../config.js';
 import { probeAuthState, type AuthVerdict } from './domSelectors.js';
 import { ensureHeadedDisplay } from './display.js';
+import { parseCookiePayload } from './cookieParser.js';
+import { NativeChromeSession } from '../remote/nativeChrome.js';
 import type { AuthState, BridgeMode, BridgeStatus, LogEvent, Screenshot } from '../types.js';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -62,6 +64,8 @@ export class ContextManager extends EventEmitter {
   private authWatcher: NodeJS.Timeout | null = null;
   private events: LogEvent[] = [];
   private lifecycleLock: Promise<unknown> = Promise.resolve();
+  /** Interactive native Chrome session (mode === 'remote'). */
+  private remoteSession: NativeChromeSession | null = null;
 
   constructor() {
     super();
@@ -156,6 +160,17 @@ export class ContextManager extends EventEmitter {
           this.stopAuthWatcher();
           await this.closeCurrent('switching to headless');
         }
+        if (this.mode === 'remote') {
+          const rs = this.remoteSession;
+          this.remoteSession = null;
+          if (rs) {
+            this.log('info', 'Closing interactive Remote Chrome — switching to headless');
+            await rs.stop();
+          }
+          this.mode = 'stopped';
+          // Let the OS release the profile lock before the relaunch.
+          await sleep(400);
+        }
         const { context, channel } = await this.launchBrowser(true);
         this.context = context;
         this.channel = channel;
@@ -172,10 +187,102 @@ export class ContextManager extends EventEmitter {
     });
   }
 
+  /**
+   * INTERACTIVE Remote Chrome — the primary server-side login path.
+   *
+   * Closes any headless/headed Playwright context, then spawns the Chromium
+   * binary NATIVELY (no Playwright attached — see nativeChrome.ts) on the
+   * Xvfb display, sharing the persistent profile. The user sees/controls it
+   * through the /remote web viewer (frames + trusted input events) and signs
+   * into Google there. When done, switchToHeadless() kills this session and
+   * relaunches the headless bridge on the now-authenticated profile.
+   */
+  async openRemoteChrome(): Promise<BridgeStatus> {
+    return this.withLock(async () => {
+      this.launching = true;
+      try {
+        if (this.mode === 'remote' && this.remoteSession && this.remoteSession.status().running) {
+          this.log('info', 'Remote Chrome is already running — open the web viewer to control it');
+          this.launching = false;
+          return this.status();
+        }
+        if (this.mode === 'headless' || this.mode === 'headed') {
+          await this.closeCurrent('releasing profile for the interactive Remote Chrome');
+        }
+        this.authState = 'unknown';
+        this.lastError = null;
+        this.remoteSession = await NativeChromeSession.start({
+          log: (level, msg) => this.log(level, msg),
+          onAuthConfirmed: () => {
+            this.authState = 'authenticated';
+          },
+          onExit: () => {
+            if (this.remoteSession) {
+              this.remoteSession = null;
+              if (this.mode === 'remote') {
+                this.mode = 'stopped';
+                this.log('warn', 'Remote Chrome window closed — profile released');
+              }
+            }
+          },
+        });
+        this.mode = 'remote';
+        this.startedAt = Date.now();
+        this.launching = false;
+        return this.status();
+      } catch (err) {
+        this.lastError = errMsg(err);
+        this.log('error', `Remote Chrome failed: ${this.lastError}`);
+        this.launching = false;
+        throw err;
+      }
+    });
+  }
+
+  /**
+   * Cookie injection — the BACKUP auth path. Parses Cookie-Editor JSON /
+   * header / Netscape formats, ensures a headless context, injects, probes.
+   */
+  async injectCookies(raw: string): Promise<BridgeStatus> {
+    return this.withLock(async () => {
+      const cookies: Cookie[] = parseCookiePayload(raw);
+      if (this.mode !== 'headless' || !this.context) {
+        if (this.mode === 'headed' || this.mode === 'remote') {
+          await this.closeCurrent('releasing profile for cookie injection');
+        }
+        const { context, channel } = await this.launchBrowser(true);
+        this.context = context;
+        this.channel = channel;
+        this.mode = 'headless';
+        this.startedAt = Date.now();
+        this.trackContext(context, 'Headless browser closed unexpectedly — use "Force Switch to Headless" to recover');
+      }
+      await this.context.addCookies(cookies);
+      this.log('info', `Injected ${cookies.length} cookies — probing Gemini session…`);
+      await this.probe();
+      return this.status();
+    });
+  }
+
+  /** Live Remote Chrome session (for the /remote routes), if any. */
+  getRemoteSession(): NativeChromeSession | null {
+    return this.remoteSession;
+  }
+
   /** Graceful shutdown (server SIGINT/SIGTERM). Closes the browser cleanly. */
   async shutdown(): Promise<void> {
     this.shutdownRequested = true;
     this.stopAuthWatcher();
+    if (this.remoteSession) {
+      const rs = this.remoteSession;
+      this.remoteSession = null;
+      try {
+        await rs.stop();
+        console.log('[bridge] Remote Chrome closed (server shutdown)');
+      } catch {
+        /* best effort during shutdown */
+      }
+    }
     const ctx = this.context;
     this.context = null;
     this.mode = 'stopped';
@@ -193,7 +300,11 @@ export class ContextManager extends EventEmitter {
     return {
       version: config.version,
       phase: config.phase,
-      running: this.context !== null,
+      // True when ANY browser holds the profile: Playwright context OR the
+      // interactive native Remote Chrome session.
+      running:
+        this.context !== null ||
+        (this.mode === 'remote' && this.remoteSession !== null && this.remoteSession.status().running),
       mode: this.mode,
       authState: this.authState,
       channel: this.channel,
