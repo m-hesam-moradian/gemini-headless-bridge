@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemini Headless Bridge — Test Host</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%2310b981'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" id="brandDot" data-tone="idle" aria-hidden="true"></span>
+      <h1>Gemini Headless Bridge</h1>
+      <span class="phase-tag">Phase 1 · Test Host</span>
+    </div>
+    <span class="conn" id="connState" role="status" data-tone="idle">connecting…</span>
+  </header>
+
+  <main class="grid">
+    <section class="card" aria-labelledby="statusTitle">
+      <div class="card-head">
+        <h2 id="statusTitle">Session status</h2>
+        <span class="state-chip" id="stateChip" data-tone="idle">…</span>
+      </div>
+      <dl class="facts">
+        <div>
+          <dt>Browser mode</dt>
+          <dd id="modeVal">—</dd>
+        </div>
+        <div>
+          <dt>Auth</dt>
+          <dd id="authVal">—</dd>
+        </div>
+        <div>
+          <dt>Browser channel</dt>
+          <dd id="channelVal">—</dd>
+        </div>
+        <div>
+          <dt>Uptime</dt>
+          <dd id="uptimeVal">—</dd>
+        </div>
+        <div class="wide">
+          <dt>Profile dir</dt>
+          <dd id="profileVal">—</dd>
+        </div>
+        <div class="wide" id="lastErrorRow" hidden>
+          <dt>Last error</dt>
+          <dd class="err" id="lastErrorVal"></dd>
+        </div>
+        <div class="wide" id="countdownRow" hidden>
+          <dt>Auto-switch</dt>
+          <dd id="countdownVal">—</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="card" aria-labelledby="actionsTitle">
+      <div class="card-head">
+        <h2 id="actionsTitle">Manual override</h2>
+      </div>
+      <p class="hint">
+        Automatic flow: sign in inside the popup, the bridge waits 3s for cookies to
+        settle, then switches to headless on its own. Use these buttons to take manual
+        control at any time — for example while Google asks for 2FA or a passkey.
+      </p>
+      <div class="actions">
+        <button id="btnLogin" class="btn primary" type="button">Open Visible Browser</button>
+        <button id="btnHeadless" class="btn" type="button">Force Switch to Headless</button>
+      </div>
+      <p class="actionFeedback" id="actionFeedback" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card log-card" aria-labelledby="logTitle">
+      <div class="card-head">
+        <h2 id="logTitle">Action log</h2>
+        <button id="btnClearLog" class="btn tiny" type="button">clear</button>
+      </div>
+      <ol class="log" id="logList" aria-live="polite"></ol>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>
+      local bridge · API: /api/auth/status · /api/auth/login · /api/auth/switch-mode · /api/logs
+    </span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

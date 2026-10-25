@@ -1,0 +1,26 @@
+{
+  "name": "gemini-headless-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent-Context Headless Browser Bridge for Gemini + Local Test Host (Playwright, Express 5, TypeScript)",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "playwright": "^1.56.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Persistent browser profile — contains your Google session cookies. NEVER commit.
+browser-profile/
+
+# Build output
+dist/
+
+# Local configuration & secrets
+.env
+
+# Logs & OS noise
+*.log
+.DS_Store
